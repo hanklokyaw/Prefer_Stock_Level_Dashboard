@@ -1,21 +1,20 @@
 import dash
-from dash import dcc, html
-from dash.dependencies import Input, Output
+from dash import dcc, html, Input, Output, State
 import pandas as pd
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
+import numpy as np
 
-# Sample data
-data = {
-    'SKU': ['Item1', 'Item2', 'Item3', 'Item4', 'Item5'],
-    'PSL': [100, 150, 200, 130, 170],
-    'ROP': [50, 70, 90, 60, 80],
-    'Stock': [80, 120, 180, 100, 150],
-    'On Order': [20, 30, 40, 25, 35],
-    'Desc': ['Description1', 'Description2', 'Description3', 'Description4', 'Description5']
-}
+# Read the data from the Excel file
+df = pd.read_excel("C:/Users/hank.aungkyaw/Documents/PSL_Inventory_Master.xlsx")
+df = df[['SKU', 'PSL', 'ROP', 'Stock', 'On Order', 'Desc', 'Initialized']]
+df = df[df['Initialized'] == 1]
 
-df = pd.DataFrame(data)
+# Apply ceiling function to the quantities
+df['PSL'] = np.ceil(df['PSL'])
+df['ROP'] = np.ceil(df['ROP'])
+df['Stock'] = np.ceil(df['Stock'])
+df['On Order'] = np.ceil(df['On Order'])
 
 # Initialize the app
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
@@ -60,13 +59,37 @@ app.layout = dbc.Container([
                 id='filter-input',
                 options=[{'label': sku, 'value': sku} for sku in df['SKU']],
                 multi=True,
-                placeholder='Filter items...'
+                placeholder='Filter items...',
+                style={'width': '100%'}
             )
         ], width=4)
     ], style={'margin-bottom': '20px', 'margin-left': '20px', 'margin-right': '20px'}),
     dbc.Row([
         dbc.Col([
-            dcc.Graph(id='inventory-graph')
+            html.Label("Filter by Prefix:"),
+            dcc.Checklist(
+                id='prefix-checklist',
+                options=[
+                    {'label': 'BB', 'value': 'BB-'},
+                    {'label': 'ED', 'value': 'ED-'},
+                    {'label': 'NC', 'value': 'NC-'},
+                    {'label': 'OT', 'value': 'OT-'},
+                    {'label': 'PL', 'value': 'PL-'},
+                    {'label': 'RN', 'value': 'RN-'},
+                    {'label': 'SN', 'value': 'SN-'}
+                ],
+                value=['BB-', 'ED-', 'NC-', 'OT-', 'PL-', 'RN-', 'SN-'],
+                inline=True,
+                style={'margin-right': '20px'}
+            )
+        ], width=12)
+    ], style={'margin-bottom': '20px', 'margin-left': '20px', 'margin-right': '20px'}),
+    dbc.Row([
+        dbc.Col([
+            html.Div(
+                dcc.Graph(id='inventory-graph'),
+                style={'overflowX': 'scroll'}
+            )
         ])
     ])
 ], fluid=True)
@@ -77,14 +100,18 @@ app.layout = dbc.Container([
     Output('inventory-graph', 'figure'),
     Input('legend-checklist', 'value'),
     Input('sort-radio', 'value'),
-    Input('filter-input', 'value')
+    Input('filter-input', 'value'),
+    Input('prefix-checklist', 'value')
 )
-def update_graph(selected_legends, sort_option, filter_value):
+def update_graph(selected_legends, sort_option, filter_value, prefix_value):
     # Filter and sort the dataframe
+    filtered_df = df.copy()
+
     if filter_value:
-        filtered_df = df[df['SKU'].isin(filter_value)]
-    else:
-        filtered_df = df
+        filtered_df = filtered_df[filtered_df['SKU'].isin(filter_value)]
+
+    if prefix_value:
+        filtered_df = filtered_df[filtered_df['SKU'].str.startswith(tuple(prefix_value))]
 
     if sort_option == 'item_asc':
         filtered_df = filtered_df.sort_values('SKU')
@@ -149,7 +176,6 @@ def update_graph(selected_legends, sort_option, filter_value):
     )
 
     return fig
-
 
 # Run the app
 if __name__ == '__main__':
